@@ -16,7 +16,7 @@ data = response.json()
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # Output folder
-output_folder = "data/bronze/products"
+output_folder = "ecommerce-data-lakehouse/data/bronze/products"
 
 # Create folder if not exists
 os.makedirs(output_folder, exist_ok=True)
