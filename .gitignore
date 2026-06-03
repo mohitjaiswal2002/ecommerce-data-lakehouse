@@ -5,3 +5,5 @@ __pycache__/
 data/
 .idea/
 .vscode/
+logs/*.log
+logs/.gitkeep

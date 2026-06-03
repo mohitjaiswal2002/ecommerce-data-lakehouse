@@ -1,22 +1,27 @@
 import requests
 import json
 import os
+import logging
 from datetime import datetime
+from utils.logger import get_logger
+from utils.config import BRONZE_PRODUCTS_PATH
+from utils.config import API_URL
 
-# API endpoint
-api_url = "https://dummyjson.com/products"
+logger = get_logger(__name__)
+
 
 # Fetch data
-response = requests.get(api_url)
+response = requests.get(API_URL, timeout=30)
+response.raise_for_status()
 
-# Convert response to JSON
+# Convert to json
 data = response.json()
 
 # Create timestamp
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # Output folder
-output_folder = "ecommerce-data-lakehouse/data/bronze/products"
+output_folder = BRONZE_PRODUCTS_PATH
 
 # Create folder if not exists
 os.makedirs(output_folder, exist_ok=True)
@@ -28,5 +33,4 @@ output_file = f"{output_folder}/products_{timestamp}.json"
 with open(output_file, "w") as file:
     json.dump(data, file, indent=4)
 
-print("Raw data saved successfully!")
-print("File location:", output_file)
+logger.info(f"Data ingestion completed successfully! Data saved to {output_file}")
