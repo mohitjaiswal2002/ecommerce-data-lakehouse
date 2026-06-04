@@ -6,7 +6,9 @@ The idea is to take data from an API, store the raw data first, clean and transf
 
 Current flow:
 
+```text
 DummyJSON API -> Bronze -> Silver -> Gold
+```
 
 ## Tech Used
 
@@ -22,37 +24,38 @@ DummyJSON API -> Bronze -> Silver -> Gold
 I am using the DummyJSON API for sample e-commerce data.
 
 Current endpoint used:
-
 https://dummyjson.com/products
+
 
 Right now the project is focused on products. Users and carts will be added later.
 
 ## Project Structure
 
 ecommerce_data_lakehouse/
-|
-|-- data/
-|   |-- bronze/
-|   |-- silver/
-|   |-- gold/
-|
-|-- ingestion/
-|   |-- ingest_products.py
-|
-|-- transformations/
-|   |-- silver_products.py
-|   |-- gold_products.py
-|
-|-- utils/
-|   |-- config.py
-|   |-- logger.py
-|
-|-- logs/
-|   |-- pipeline.log
-|
-|-- tests/
-|-- requirements.txt
-|-- README.md
+│
+├── data/
+│   ├── bronze/
+│   ├── silver/
+│   └── gold/
+│
+├── ingestion/
+│   └── ingest_products.py
+│
+├── transformations/
+│   ├── silver_products.py
+│   └── gold_products.py
+│
+├── utils/
+│   ├── config.py
+│   └── logger.py
+│
+├── logs/
+│   └── pipeline.log
+│
+├── tests/
+├── requirements.txt
+└── README.md
+
 
 ## Bronze Layer
 
@@ -64,9 +67,10 @@ Script:
 
 ingestion/ingest_products.py
 
-Output:
 
+Output:
 data/bronze/products
+
 
 The files are saved with timestamps so that old raw data is not overwritten.
 
@@ -76,7 +80,9 @@ The Silver layer takes the raw product JSON and converts it into a cleaner struc
 
 Script:
 
+```text
 transformations/silver_products.py
+```
 
 Main steps:
 
@@ -92,7 +98,9 @@ Main steps:
 
 Output:
 
+```text
 data/silver/products
+```
 
 The Silver product data is partitioned by category.
 
@@ -102,13 +110,17 @@ The Gold layer creates product-level business metrics from the Silver data.
 
 Script:
 
+```text
 transformations/gold_products.py
+```
 
 Gold outputs:
 
+```text
 data/gold/product_metrics/category_summary
 data/gold/product_metrics/brand_performance
 data/gold/product_metrics/product_enriched
+```
 
 These tables can be used for analysis or a dashboard.
 
@@ -129,20 +141,26 @@ Some of the metrics created are:
 
 Run the scripts in this order:
 
+```powershell
 python ingestion\ingest_products.py
 python transformations\silver_products.py
 python transformations\gold_products.py
+```
 
 If running through Spark submit:
 
+```powershell
 spark-submit transformations\silver_products.py
 spark-submit transformations\gold_products.py
+```
 
 ## Logging
 
 Logs are written to:
 
+```text
 logs/pipeline.log
+```
 
 The logs show when each job starts, row counts, output paths, and when each transformation completes.
 
