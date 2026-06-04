@@ -19,11 +19,17 @@ def transform_products():
 
     spark = SparkSession.builder.appName("ProductsBronzeToSilver").getOrCreate()
 
+    # ---------------------------------------------------------------------------
+    # 1. Read Bronze JSON Data
+    # ---------------------------------------------------------------------------
     logger.info(f"Reading Bronze JSON data from: {BRONZE_PRODUCTS_PATH}")
     raw_df = spark.read.options(multiline="true").json(
         os.path.join(BRONZE_PRODUCTS_PATH, "*.json")
     )
 
+    # ---------------------------------------------------------------------------
+    # 2. Flatten Product Records
+    # ---------------------------------------------------------------------------
     df = raw_df.select(F.explode("products").alias("product")).select(
         F.col("product.id").alias("id"),
         F.col("product.title").alias("title"),
@@ -38,11 +44,17 @@ def transform_products():
 
     logger.info(f"Bronze row count: {df.count()}")
 
+    # ---------------------------------------------------------------------------
+    # 3. Deduplicate Products
+    # ---------------------------------------------------------------------------
     before = df.count()
     df = df.dropDuplicates(["id"])
     after = df.count()
     logger.info(f"Deduplication: {before - after} duplicate rows removed")
 
+    # ---------------------------------------------------------------------------
+    # 4. Enforce Silver Schema
+    # ---------------------------------------------------------------------------
     df = df.select(
         F.col("id").cast(IntegerType()).alias("product_id"),
         F.col("title").cast(StringType()).alias("title"),
@@ -56,6 +68,9 @@ def transform_products():
         F.current_date().alias("ingestion_date"),
     )
 
+    # ---------------------------------------------------------------------------
+    # 5. Handle Null Values
+    # ---------------------------------------------------------------------------
     df = df.fillna(
         {
             "price": 0.0,
@@ -68,6 +83,9 @@ def transform_products():
         }
     )
 
+    # ---------------------------------------------------------------------------
+    # 6. Apply Data Quality Rules
+    # ---------------------------------------------------------------------------
     invalid_price = df.filter(F.col("price") < 0).count()
     invalid_stock = df.filter(F.col("stock") < 0).count()
     invalid_rating = df.filter((F.col("rating") < 0) | (F.col("rating") > 5)).count()
@@ -84,6 +102,9 @@ def transform_products():
         logger.warning(f"Found {invalid_rating} rows with invalid rating - dropping them")
         df = df.filter((F.col("rating") >= 0) & (F.col("rating") <= 5))
 
+    # ---------------------------------------------------------------------------
+    # 7. Add Derived Product Columns
+    # ---------------------------------------------------------------------------
     df = df.withColumn(
         "discounted_price",
         F.round(F.col("price") * (1 - F.col("discount_percentage") / 100), 2),
@@ -96,6 +117,9 @@ def transform_products():
         .otherwise("In Stock"),
     )
 
+    # ---------------------------------------------------------------------------
+    # 8. Preview Silver Output
+    # ---------------------------------------------------------------------------
     logger.info("Sample Silver products data:")
     df.select(
         "product_id",
@@ -107,6 +131,9 @@ def transform_products():
     ).show(5, truncate=False)
     logger.info(f"Final Silver row count: {df.count()}")
 
+    # ---------------------------------------------------------------------------
+    # 9. Write Silver Products
+    # ---------------------------------------------------------------------------
     logger.info(f"Writing Silver Parquet data to: {SILVER_PRODUCTS_PATH}")
     (
         df.write.mode("overwrite")
