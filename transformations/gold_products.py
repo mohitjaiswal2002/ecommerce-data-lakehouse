@@ -1,33 +1,33 @@
 import os
 import sys
- 
+
 from pyspark.sql import SparkSession, Window
 from pyspark.sql import functions as F
- 
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
- 
-from utils.config import SILVER_PRODUCTS_PATH, GOLD_PRODUCT_PATH
+
+from utils.config import SILVER_PRODUCTS_PATH, GOLD_PRODUCT_METRICS
 from utils.logger import get_logger
- 
- 
+
+
 logger = get_logger(__name__)
- 
- 
+
+
 def transform_products():
-    logger.info("=== Starting Products Silver to Gold Transformation ===")
- 
+    logger.info("=== Gold Carts Pipeline — START ===")
+
     spark = SparkSession.builder.appName("ProductsSilverToGold").getOrCreate()
- 
+
     logger.info(f"Reading Silver Parquet data from: {SILVER_PRODUCTS_PATH}")
     df = spark.read.parquet(SILVER_PRODUCTS_PATH)
- 
+
     logger.info(f"Silver row count: {df.count()}")
- 
+
     # ---------------------------------------------------------------------------
     # 1. Price Tier Segmentation
     # ---------------------------------------------------------------------------
     logger.info("Building: price tier segmentation")
- 
+
     df = df.withColumn(
         "price_tier",
         F.when(F.col("discounted_price") < 20, "Budget")
@@ -35,13 +35,12 @@ def transform_products():
         .when(F.col("discounted_price") < 500, "Premium")
         .otherwise("Luxury"),
     )
- 
+
     # ---------------------------------------------------------------------------
     # 2. Category Summary
     # ---------------------------------------------------------------------------
     logger.info("Building: category summary")
- 
-    # Identify the top brand per category by number of products
+
     brand_counts = df.groupBy("category", "brand").agg(
         F.count("product_id").alias("brand_product_count")
     )
@@ -53,7 +52,7 @@ def transform_products():
         .filter(F.col("rank") == 1)
         .select(F.col("category"), F.col("brand").alias("top_brand"))
     )
- 
+
     category_summary_df = (
         df.groupBy("category")
         .agg(
@@ -76,15 +75,15 @@ def transform_products():
         .join(top_brand_per_category, on="category", how="left")
         .withColumn("ingestion_date", F.current_date())
     )
- 
+
     logger.info("Sample category summary:")
     category_summary_df.show(5, truncate=False)
- 
+
     # ---------------------------------------------------------------------------
     # 3. Brand Performance
     # ---------------------------------------------------------------------------
     logger.info("Building: brand performance")
- 
+
     brand_performance_df = (
         df.groupBy("brand")
         .agg(
@@ -109,19 +108,19 @@ def transform_products():
         .withColumn("ingestion_date", F.current_date())
         .orderBy(F.col("revenue_potential").desc())
     )
- 
+
     logger.info("Sample brand performance:")
     brand_performance_df.show(5, truncate=False)
- 
+
     # ---------------------------------------------------------------------------
     # 4. Product Enriched (full fact table with all derived fields)
     # ---------------------------------------------------------------------------
     logger.info("Building: enriched product fact table")
- 
+
     window_category_rank = Window.partitionBy("category").orderBy(
         F.col("rating").desc()
     )
- 
+
     product_enriched_df = (
         df.withColumn(
             "rating_rank_in_category", F.rank().over(window_category_rank)
@@ -140,7 +139,7 @@ def transform_products():
         )
         .withColumn("ingestion_date", F.current_date())
     )
- 
+
     logger.info("Sample enriched products:")
     product_enriched_df.select(
         "product_id",
@@ -152,39 +151,32 @@ def transform_products():
         "rating_rank_in_category",
         "is_top_rated_in_category",
     ).show(5, truncate=False)
- 
+
     logger.info(f"Final Gold enriched product count: {product_enriched_df.count()}")
- 
+
     # ---------------------------------------------------------------------------
     # Write Gold Tables
     # ---------------------------------------------------------------------------
-    category_summary_path = os.path.join(GOLD_PRODUCT_PATH, "category_summary")
-    brand_performance_path = os.path.join(GOLD_PRODUCT_PATH, "brand_performance")
-    product_enriched_path = os.path.join(GOLD_PRODUCT_PATH, "product_enriched")
- 
+    category_summary_path  = os.path.join(GOLD_PRODUCT_METRICS, "category_summary")
+    brand_performance_path = os.path.join(GOLD_PRODUCT_METRICS, "brand_performance")
+    product_enriched_path  = os.path.join(GOLD_PRODUCT_METRICS, "product_enriched")
+
     logger.info(f"Writing category_summary to: {category_summary_path}")
-    (
-        category_summary_df.write.mode("overwrite")
-        .parquet(category_summary_path)
-    )
- 
+    category_summary_df.write.mode("overwrite").parquet(category_summary_path)
+
     logger.info(f"Writing brand_performance to: {brand_performance_path}")
-    (
-        brand_performance_df.write.mode("overwrite")
-        .parquet(brand_performance_path)
-    )
- 
+    brand_performance_df.write.mode("overwrite").parquet(brand_performance_path)
+
     logger.info(f"Writing product_enriched to: {product_enriched_path}")
     (
         product_enriched_df.write.mode("overwrite")
         .partitionBy("category")
         .parquet(product_enriched_path)
     )
- 
-    logger.info("=== Products Gold Transformation Complete ===")
+
+    logger.info("=== Gold Products Pipeline — COMPLETE ===")
     spark.stop()
- 
- 
+
+
 if __name__ == "__main__":
     transform_products()
- 

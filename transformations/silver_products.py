@@ -12,10 +12,9 @@ from utils.logger import get_logger
 
 
 logger = get_logger(__name__)
-
+logger.info("=== Silver Products Pipeline - START ===")
 
 def transform_products():
-    logger.info("=== Starting Products Bronze to Silver Transformation ===")
 
     spark = SparkSession.builder.appName("ProductsBronzeToSilver").getOrCreate()
 
@@ -141,7 +140,7 @@ def transform_products():
         .parquet(SILVER_PRODUCTS_PATH)
     )
 
-    logger.info("=== Products Silver Transformation Complete ===")
+    logger.info("=== Silver Products Pipeline - COMPLETE ===")
     spark.stop()
 
 
