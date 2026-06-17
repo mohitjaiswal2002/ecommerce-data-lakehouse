@@ -1,100 +1,197 @@
-# E-Commerce Data Lakehouse Project
+# E-Commerce Data Lakehouse with PySpark
 
-This is a data engineering project where I am building an e-commerce lakehouse pipeline step by step using Python and PySpark.
+An end-to-end Data Engineering project implementing a Medallion Architecture (Bronze → Silver → Gold) using PySpark.
 
-The idea is to take data from an API, store the raw data first, clean and transform it, and then create business-level tables that can be used for analysis or dashboards.
+The pipeline ingests e-commerce data from public REST APIs, stores raw snapshots, performs data cleansing and enrichment, and generates business-ready analytical datasets that can be consumed by reporting and BI tools.
 
-Current flow:
+## Architecture
 
 ```text
-DummyJSON API -> Bronze -> Silver -> Gold
+                DummyJSON API
+                       │
+                       ▼
+                Bronze Layer
+          (Raw JSON API Snapshots)
+                       │
+                       ▼
+                Silver Layer
+      (Cleaned, Standardized Data)
+                       │
+                       ▼
+                 Gold Layer
+        (Business KPIs & Analytics)
 ```
 
-## Tech Used
+## Tech Stack
 
 - Python
 - PySpark
 - Parquet
 - Requests
-- Python logging
+- Python Logging
 - Git
 
 ## Data Source
 
-I am using the DummyJSON API for sample e-commerce data.
+This project uses the DummyJSON API as a sample e-commerce dataset.
 
-Current endpoint used:
-https://dummyjson.com/products
+Endpoints:
 
+- https://dummyjson.com/products
+- https://dummyjson.com/users
+- https://dummyjson.com/carts
 
-Right now the project is focused on products. Users and carts will be added later.
+## Key Features
+
+- End-to-end Medallion Architecture implementation
+- API-based data ingestion
+- Raw data preservation in Bronze layer
+- Modular PySpark transformation pipelines
+- Data cleansing and standardization
+- Category-based partitioning
+- User demographic enrichment
+- Customer spending analytics
+- Product inventory analytics
+- Business KPI generation
+- Centralized configuration management
+- Centralized logging framework
+- Reusable utility modules
+
+---
 
 ## Project Structure
 
+```text
 ecommerce_data_lakehouse/
 │
 ├── data/
 │   ├── bronze/
+│   │   ├── products/
+│   │   ├── users/
+│   │   └── carts/
+│   │
 │   ├── silver/
+│   │   ├── products/
+│   │   │   ├── category=beauty/
+│   │   │   ├── category=fragrances/
+│   │   │   ├── category=furniture/
+│   │   │   └── category=groceries/
+│   │   │
+│   │   ├── users/
+│   │   │
+│   │   └── carts/
+│   │       ├── cart_summary/
+│   │       └── cart_items/
+│   │
 │   └── gold/
+│       ├── category_metrics/
+│       ├── product_metrics/
+│       ├── low_stock_alerts/
+│       ├── top_products/
+│       ├── top_users/
+│       ├── user_metrics/
+│       ├── user_spend_metrics/
+│       ├── user_segments/
+│       └── user_metrics/
+│           ├── demographic_metrics/
+│           └── user_enriched/
 │
 ├── ingestion/
-│   └── ingest_products.py
+│   ├── ingest_products.py
+│   ├── ingest_users.py
+│   └── ingest_carts.py
 │
 ├── transformations/
 │   ├── silver_products.py
-│   └── gold_products.py
+│   ├── silver_users.py
+│   ├── silver_carts.py
+│   ├── gold_products.py
+│   ├── gold_users.py
+│   └── gold_carts.py
 │
 ├── utils/
+│   ├── api_utils.py
 │   ├── config.py
-│   └── logger.py
+│   ├── logger.py
+│   └── spark_session.py
+│
+├── tests/
 │
 ├── logs/
 │   └── pipeline.log
 │
-├── tests/
 ├── requirements.txt
 └── README.md
-
-
-## Bronze Layer
-
-The Bronze layer stores raw API data.
-
-For products, the ingestion script calls the API and saves the response as JSON files.
-
-Script:
-
-ingestion/ingest_products.py
-
-
-Output:
-data/bronze/products
-
-
-The files are saved with timestamps so that old raw data is not overwritten.
-
-## Silver Layer
-
-The Silver layer takes the raw product JSON and converts it into a cleaner structure.
-
-Script:
-
-```text
-transformations/silver_products.py
 ```
 
-Main steps:
+---
 
-- Read raw JSON files from Bronze
-- Explode the nested `products` array
-- Flatten product fields
-- Cast columns to proper data types
-- Remove duplicate products
-- Handle null values
-- Apply basic data quality checks
-- Add derived columns like `discounted_price` and `stock_status`
-- Write the output as Parquet
+# Bronze Layer
+
+The Bronze layer stores raw API responses exactly as received from the source system.
+
+Each ingestion script extracts data from the respective API endpoint and stores timestamped JSON snapshots.
+
+### Ingestion Scripts
+
+```text
+ingestion/ingest_products.py
+ingestion/ingest_users.py
+ingestion/ingest_carts.py
+```
+
+### Bronze Outputs
+
+```text
+data/bronze/products
+data/bronze/users
+data/bronze/carts
+```
+
+### Bronze Responsibilities
+
+- API extraction
+- Raw data preservation
+- Historical snapshot retention
+- No transformations applied
+
+---
+
+# Silver Layer
+
+The Silver layer transforms raw JSON into structured, analytics-ready datasets.
+
+### Common Transformations
+
+- JSON flattening
+- Schema standardization
+- Data type casting
+- Duplicate removal
+- Null handling
+- Derived column creation
+- Business logic enrichment
+
+---
+
+## Product Transformations
+
+Source:
+
+```text
+data/bronze/products
+```
+
+Derived columns:
+
+- discounted_price
+- discount_amount
+- stock_status
+
+Additional processing:
+
+- Product schema standardization
+- Price calculations
+- Inventory enrichment
 
 Output:
 
@@ -102,105 +199,321 @@ Output:
 data/silver/products
 ```
 
-The Silver product data is partitioned by category.
+Products are partitioned by category for optimized query performance.
 
-## Gold Layer
+---
 
-The Gold layer creates product-level business metrics from the Silver data.
+## User Transformations
 
-Script:
-
-```text
-transformations/gold_products.py
-```
-
-Gold outputs:
+Source:
 
 ```text
-data/gold/product_metrics/category_summary
-data/gold/product_metrics/brand_performance
-data/gold/product_metrics/product_enriched
+data/bronze/users
 ```
 
-These tables can be used for analysis or a dashboard.
+Derived columns:
 
-Some of the metrics created are:
+- full_name
+- age_group
 
-- Category summary
-- Average price by category
-- Average discount by category
-- Total stock
+Additional processing:
+
+- User profile standardization
+- Demographic enrichment
+
+Output:
+
+```text
+data/silver/users
+```
+
+---
+
+## Cart Transformations
+
+Source:
+
+```text
+data/bronze/carts
+```
+
+Cart data is normalized into two datasets:
+
+### cart_summary
+
+One record per cart.
+
+### cart_items
+
+One record per product within a cart.
+
+Outputs:
+
+```text
+data/silver/carts/cart_summary
+data/silver/carts/cart_items
+```
+
+---
+
+# Gold Layer
+
+The Gold layer produces business-focused datasets for reporting, analytics, and dashboard consumption.
+
+---
+
+## Product Analytics
+
+### product_metrics
+
+Product-level KPI dataset containing:
+
+- Revenue potential
 - Inventory value
-- Top brand by category
-- Brand performance
-- Product price tier
-- Product rank inside category
-- Savings per unit
+- Product rankings
+- Stock indicators
+- Pricing insights
 
-## How To Run
+Output:
 
-Run the scripts in this order:
+```text
+data/gold/product_metrics
+```
+
+---
+
+### category_metrics
+
+Category-level aggregations:
+
+- Average price
+- Average discount percentage
+- Total inventory value
+- Total stock
+- Top brand per category
+
+Output:
+
+```text
+data/gold/category_metrics
+```
+
+---
+
+## User Analytics
+
+### user_enriched
+
+Customer master dataset enriched with:
+
+- Demographics
+- Spending information
+- Cart activity
+
+Output:
+
+```text
+data/gold/user_metrics/user_enriched
+```
+
+---
+
+### demographic_metrics
+
+Aggregated customer insights by:
+
+- Gender
+- Age group
+
+Output:
+
+```text
+data/gold/user_metrics/demographic_metrics
+```
+
+---
+
+### user_spend_metrics
+
+Customer spending KPIs:
+
+- Total spend
+- Average spend
+- Total carts
+- Total items purchased
+
+Output:
+
+```text
+data/gold/user_spend_metrics
+```
+
+---
+
+### user_segments
+
+Customer segmentation based on spending behavior:
+
+- High Value
+- Mid Value
+- Low Value
+
+Output:
+
+```text
+data/gold/user_segments
+```
+
+---
+
+### top_users
+
+Top spending customers ranked by total spend.
+
+Output:
+
+```text
+data/gold/top_users
+```
+
+---
+
+## Cart Analytics
+
+### user_metrics
+
+Customer purchasing activity metrics:
+
+- Total carts
+- Total items ordered
+- Total spend
+
+Output:
+
+```text
+data/gold/user_metrics
+```
+
+---
+
+### top_products
+
+Most frequently purchased products.
+
+Output:
+
+```text
+data/gold/top_products
+```
+
+---
+
+### low_stock_alerts
+
+Products below inventory threshold requiring attention.
+
+Output:
+
+```text
+data/gold/low_stock_alerts
+```
+
+---
+
+# How to Run
+
+Execute scripts in the following order.
+
+## Step 1: Ingestion
 
 ```powershell
 python ingestion\ingest_products.py
-python transformations\silver_products.py
-python transformations\gold_products.py
+python ingestion\ingest_users.py
+python ingestion\ingest_carts.py
 ```
 
-If running through Spark submit:
+## Step 2: Silver Transformations
 
 ```powershell
-spark-submit transformations\silver_products.py
-spark-submit transformations\gold_products.py
+python transformations\silver_products.py
+python transformations\silver_users.py
+python transformations\silver_carts.py
 ```
 
-## Logging
+## Step 3: Gold Transformations
 
-Logs are written to:
+```powershell
+python transformations\gold_products.py
+python transformations\gold_carts.py
+python transformations\gold_users.py
+```
+
+---
+
+# Logging
+
+All pipeline execution logs are written to:
 
 ```text
 logs/pipeline.log
 ```
 
-The logs show when each job starts, row counts, output paths, and when each transformation completes.
+Logging captures:
 
-## Current Status
+- Job start and completion
+- Record counts
+- Transformation progress
+- Output locations
+- Runtime errors and warnings
 
-Completed so far:
+---
 
-- Product API ingestion
-- Bronze product JSON storage
-- Silver product transformation
-- Gold product metrics
-- Logging
-- Parquet output
-- Category partitioning
+# Skills Demonstrated
 
-Still pending:
+## Data Engineering
 
-- Users ingestion
-- Carts ingestion
-- Silver users transformation
-- Silver carts transformation
-- Gold revenue/customer metrics
-- Airflow DAG
-- More validation checks
-- Unit tests
-- Dashboard
-- Delta Lake support
+- ETL / ELT Pipeline Development
+- Medallion Architecture
+- Data Lakehouse Design
+- Data Modeling
+- Batch Processing
 
-## Next Steps
+## PySpark
 
-My next plan is to complete the remaining data sources one by one:
+- DataFrame API
+- Aggregations
+- Joins
+- Window Functions
+- Schema Management
+- Partitioning
 
-1. Add users ingestion
-2. Add carts ingestion
-3. Create Silver tables for users and carts
-4. Create Gold metrics using products, users, and carts together
-5. Add Airflow scheduling once the scripts are stable
+## Software Engineering
 
-After that, I want to add Delta Lake and dashboard reporting.
+- Modular Code Design
+- Reusable Utility Modules
+- Logging Framework
+- Configuration Management
+- Git Version Control
 
-## Notes
+---
 
-This project is still in progress. I am building it in phases so that each layer works properly before adding more complexity.
+# Future Enhancements
+
+Planned improvements:
+
+- Apache Airflow orchestration
+- Docker containerization
+- Delta Lake integration
+- Incremental data processing
+- CI/CD pipeline
+- Automated testing with PyTest
+- Power BI dashboard development
+- Data quality monitoring framework
+
+---
+
+# Notes
+
+This project demonstrates the implementation of a complete Medallion Data Lakehouse using PySpark, covering the full data lifecycle from API ingestion through business-ready analytics.
+
+The architecture follows modern data engineering practices by separating raw, cleansed, and analytical datasets into Bronze, Silver, and Gold layers respectively, enabling scalability, maintainability, and analytical flexibility.

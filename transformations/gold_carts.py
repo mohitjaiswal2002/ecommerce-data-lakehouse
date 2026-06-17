@@ -200,7 +200,7 @@ def build_low_stock_alerts(product_metrics_df):
 
     df = (
         product_metrics_df
-        .filter(F.col("is_low_stock") == True)  # noqa: E712
+        .filter(F.col("is_low_stock") == True) 
         .select("product_id", "title", "category", "stock", "price", "gold_date")
         .orderBy("stock")
     )
