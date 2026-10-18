@@ -6,8 +6,11 @@ All ingestion scripts (products, users, carts) should import from here
 instead of duplicating request logic.
 """
 
+import json
 import logging
+import os
 import time
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 import requests
@@ -58,7 +61,8 @@ def fetch_with_retry(
             return response.json()
 
         except requests.exceptions.HTTPError as exc:
-            status = exc.response.status_code if exc.response else "unknown"
+            # A Response is falsy for 4xx/5xx, so compare against None explicitly.
+            status = exc.response.status_code if exc.response is not None else "unknown"
             # Don't retry client errors (4xx) — they won't fix themselves.
             if exc.response is not None and exc.response.status_code < 500:
                 log.error(f"Client error {status} for {url}. Not retrying.")
@@ -136,3 +140,24 @@ def fetch_all_pages(
 
     log.info(f"Pagination complete. Total fetched: {len(all_records)}")
     return all_records
+
+
+def save_bronze_snapshot(records: list, data_key: str, output_dir: str) -> str:
+    """
+    Write *records* to a timestamped JSON file in *output_dir*.
+
+    The file keeps the DummyJSON envelope ({data_key: [...], "total": n}) so
+    the Silver jobs can explode the same key regardless of how many pages
+    were fetched. The YYYYMMDD_HHMMSS suffix sorts chronologically, which the
+    Silver jobs rely on to keep the latest version of each record.
+
+    Returns the path of the written file.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = os.path.join(output_dir, f"{data_key}_{timestamp}.json")
+
+    with open(output_file, "w", encoding="utf-8") as file:
+        json.dump({data_key: records, "total": len(records)}, file, indent=4)
+
+    return output_file

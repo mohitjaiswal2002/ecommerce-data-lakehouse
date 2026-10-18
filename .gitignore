@@ -7,3 +7,9 @@ data/
 .vscode/
 logs/*.log
 logs/.gitkeep
+airflow/logs/
+airflow/plugins/
+airflow/config/
+output/
+tmp/
+.pytest_cache/

@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.config import BRONZE_CARTS_PATH, SILVER_CARTS_PATH
 from utils.logger import get_logger
+from utils.transforms import keep_latest_snapshot
 
 
 logger = get_logger(__name__)
@@ -30,7 +31,11 @@ def transform_carts():
     # ---------------------------------------------------------------------------
     # 2. Flatten Cart Header Records
     # ---------------------------------------------------------------------------
-    carts_df = raw_df.select(F.explode("carts").alias("cart")).select(
+    carts_df = raw_df.select(
+        F.col("_metadata.file_path").alias("source_file"),
+        F.explode("carts").alias("cart"),
+    ).select(
+        F.col("source_file"),
         F.col("cart.id").alias("id"),
         F.col("cart.userId").alias("userId"),
         F.col("cart.totalProducts").alias("totalProducts"),
@@ -46,9 +51,10 @@ def transform_carts():
     # 3. Deduplicate Carts
     # ---------------------------------------------------------------------------
     before = carts_df.count()
-    carts_df = carts_df.dropDuplicates(["id"])
+    # Bronze keeps every snapshot; keep only the most recent version of each cart.
+    carts_df = keep_latest_snapshot(carts_df)
     after = carts_df.count()
-    logger.info(f"Deduplication: {before - after} duplicate carts removed")
+    logger.info(f"Deduplication: {before - after} older/duplicate cart versions removed")
 
     # ---------------------------------------------------------------------------
     # 4. Build Cart Summary Table

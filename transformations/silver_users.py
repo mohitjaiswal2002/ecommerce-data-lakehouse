@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.config import BRONZE_USERS_PATH, SILVER_USERS_PATH
 from utils.logger import get_logger
+from utils.transforms import add_user_derived_columns, keep_latest_snapshot
 
 
 logger = get_logger(__name__)
@@ -30,7 +31,11 @@ def transform_users():
     # ---------------------------------------------------------------------------
     # 2. Flatten User Records
     # ---------------------------------------------------------------------------
-    df = raw_df.select(F.explode("users").alias("user")).select(
+    df = raw_df.select(
+        F.col("_metadata.file_path").alias("source_file"),
+        F.explode("users").alias("user"),
+    ).select(
+        F.col("source_file"),
         F.col("user.id").alias("id"),
         F.col("user.firstName").alias("firstName"),
         F.col("user.lastName").alias("lastName"),
@@ -55,9 +60,10 @@ def transform_users():
     # 3. Deduplicate Users
     # ---------------------------------------------------------------------------
     before = df.count()
-    df = df.dropDuplicates(["id"])
+    # Bronze keeps every snapshot; keep only the most recent version of each user.
+    df = keep_latest_snapshot(df)
     after = df.count()
-    logger.info(f"Deduplication: {before - after} duplicate users removed")
+    logger.info(f"Deduplication: {before - after} older/duplicate user versions removed")
 
     # ---------------------------------------------------------------------------
     # 4. Enforce Silver Schema
@@ -121,16 +127,7 @@ def transform_users():
     # ---------------------------------------------------------------------------
     # 7. Add Derived User Columns
     # ---------------------------------------------------------------------------
-    df = df.withColumn("full_name", F.concat_ws(" ", F.col("first_name"), F.col("last_name")))
-
-    df = df.withColumn(
-        "age_group",
-        F.when(F.col("age") < 18, "Under 18")
-        .when(F.col("age") < 30, "18-29")
-        .when(F.col("age") < 45, "30-44")
-        .when(F.col("age") < 60, "45-59")
-        .otherwise("60+"),
-    )
+    df = add_user_derived_columns(df)
 
     # ---------------------------------------------------------------------------
     # 8. Preview Silver Output

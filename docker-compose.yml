@@ -1,0 +1,21 @@
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    container_name: ecommerce-airflow
+    restart: unless-stopped
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      ECOMMERCE_LAKEHOUSE_HOME: /opt/airflow/projects/ecommerce_data_lakehouse
+      ECOMMERCE_LAKEHOUSE_PYTHON: python
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./:/opt/airflow/projects/ecommerce_data_lakehouse
+    command: airflow standalone

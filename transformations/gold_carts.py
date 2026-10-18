@@ -14,9 +14,7 @@ Gold tables produced:
 
 import os
 import sys
-from datetime import datetime
-
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Window
 import pyspark.sql.functions as F
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -41,10 +39,6 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Spark session
 # ---------------------------------------------------------------------------
-
-logger.info("=== Gold Carts Pipeline - START ===")
-
-
 def get_spark() -> SparkSession:
     return (
         SparkSession.builder
@@ -111,7 +105,7 @@ def build_product_metrics(spark: SparkSession):
                 F.coalesce(cart_agg["total_quantity_in_carts"], F.lit(0)) * products["price"], 2
             ).alias("revenue_estimate"),
             (products["stock"] < LOW_STOCK_THRESHOLD).cast("boolean").alias("is_low_stock"),
-            F.lit(datetime.utcnow().strftime("%Y-%m-%d")).alias("gold_date"),
+            F.current_date().alias("gold_date"),
         )
     )
 
@@ -153,8 +147,6 @@ def build_user_metrics(spark: SparkSession):
     logger.info("Building user_metrics …")
 
     users = spark.read.parquet(SILVER_USERS_PATH)
-
-
     cart_summary = spark.read.parquet(os.path.join(SILVER_CARTS_PATH, "cart_summary"))
 
     # cart_summary has: cart_id, user_id, total_quantity, discounted_total
@@ -172,7 +164,6 @@ def build_user_metrics(spark: SparkSession):
         )
     )
 
-   
     df = (
         users
         .join(user_agg, users["user_id"] == user_agg["user_id"], "left")
@@ -185,7 +176,7 @@ def build_user_metrics(spark: SparkSession):
             F.coalesce(user_agg["total_items_ordered"],  F.lit(0)).alias("total_items_ordered"),
             F.coalesce(user_agg["total_spend_estimate"], F.lit(0.0)).alias("total_spend_estimate"),
             F.coalesce(user_agg["avg_spend_per_cart"],   F.lit(0.0)).alias("avg_spend_per_cart"),
-            F.lit(datetime.utcnow().strftime("%Y-%m-%d")).alias("gold_date"),
+            F.current_date().alias("gold_date"),
         )
         .orderBy(F.col("total_spend_estimate").desc())
     )
@@ -200,7 +191,7 @@ def build_low_stock_alerts(product_metrics_df):
 
     df = (
         product_metrics_df
-        .filter(F.col("is_low_stock") == True) 
+        .filter(F.col("is_low_stock"))
         .select("product_id", "title", "category", "stock", "price", "gold_date")
         .orderBy("stock")
     )
@@ -213,15 +204,17 @@ def build_top_products(product_metrics_df, n: int = TOP_N_PRODUCTS):
     """Top N products ranked by cart_appearances (most carted)."""
     logger.info(f"Building top_{n}_products …")
 
+    # product_id breaks ties so the ranking is deterministic between runs.
+    rank_window = Window.orderBy(F.col("cart_appearances").desc(), F.col("product_id"))
+
     df = (
         product_metrics_df
-        .orderBy(F.col("cart_appearances").desc())
-        .limit(n)
+        .withColumn("rank", F.row_number().over(rank_window))
+        .filter(F.col("rank") <= n)
         .select(
-            "product_id", "title", "category",
+            "rank", "product_id", "title", "category",
             "cart_appearances", "revenue_estimate", "price", "rating",
         )
-        .withColumn("rank", F.monotonically_increasing_id() + 1)
     )
 
     write_gold(df, GOLD_TOP_PRODUCTS, f"top_{n}_products")

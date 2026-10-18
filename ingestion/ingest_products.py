@@ -1,36 +1,33 @@
-import requests
-import json
+"""
+ingest_products.py
+------------------
+Fetches all products from the DummyJSON API (paginated) and saves the raw
+JSON to the Bronze layer.
+
+Run:
+    python ingestion/ingest_products.py
+"""
+
 import os
-import logging
-from datetime import datetime
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from utils.api_utils import fetch_all_pages, save_bronze_snapshot
+from utils.config import API_LIMIT, BRONZE_PRODUCTS_PATH, PRODUCTS_API_URL
 from utils.logger import get_logger
-from utils.config import BRONZE_PRODUCTS_PATH
-from utils.config import API_URL
 
 logger = get_logger(__name__)
 
 
-# Fetch data
-response = requests.get(API_URL, timeout=30)
-response.raise_for_status()
+def ingest_products():
+    logger.info("=== Products Ingestion - START ===")
 
-# Convert to json
-data = response.json()
+    records = fetch_all_pages(PRODUCTS_API_URL, data_key="products", limit=API_LIMIT)
+    output_file = save_bronze_snapshot(records, "products", BRONZE_PRODUCTS_PATH)
 
-# Create timestamp
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logger.info(f"Products ingestion completed: {len(records)} records saved to {output_file}")
 
-# Output folder
-output_folder = BRONZE_PRODUCTS_PATH
 
-# Create folder if not exists
-os.makedirs(output_folder, exist_ok=True)
-
-# Output file path
-output_file = f"{output_folder}/products_{timestamp}.json"
-
-# Save raw JSON
-with open(output_file, "w") as file:
-    json.dump(data, file, indent=4)
-
-logger.info(f"Data ingestion completed successfully! Data saved to {output_file}")
+if __name__ == "__main__":
+    ingest_products()

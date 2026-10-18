@@ -7,14 +7,16 @@ from pyspark.sql.types import DoubleType, IntegerType, StringType
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from utils.config import BRONZE_PRODUCTS_PATH, SILVER_PRODUCTS_PATH
+from utils.config import BRONZE_PRODUCTS_PATH, LOW_STOCK_THRESHOLD, SILVER_PRODUCTS_PATH
 from utils.logger import get_logger
+from utils.transforms import add_product_derived_columns, keep_latest_snapshot
 
 
 logger = get_logger(__name__)
-logger.info("=== Silver Products Pipeline - START ===")
+
 
 def transform_products():
+    logger.info("=== Silver Products Pipeline - START ===")
 
     spark = SparkSession.builder.appName("ProductsBronzeToSilver").getOrCreate()
 
@@ -29,7 +31,11 @@ def transform_products():
     # ---------------------------------------------------------------------------
     # 2. Flatten Product Records
     # ---------------------------------------------------------------------------
-    df = raw_df.select(F.explode("products").alias("product")).select(
+    df = raw_df.select(
+        F.col("_metadata.file_path").alias("source_file"),
+        F.explode("products").alias("product"),
+    ).select(
+        F.col("source_file"),
         F.col("product.id").alias("id"),
         F.col("product.title").alias("title"),
         F.col("product.description").alias("description"),
@@ -47,9 +53,10 @@ def transform_products():
     # 3. Deduplicate Products
     # ---------------------------------------------------------------------------
     before = df.count()
-    df = df.dropDuplicates(["id"])
+    # Bronze keeps every snapshot; keep only the most recent version of each product.
+    df = keep_latest_snapshot(df)
     after = df.count()
-    logger.info(f"Deduplication: {before - after} duplicate rows removed")
+    logger.info(f"Deduplication: {before - after} older/duplicate product versions removed")
 
     # ---------------------------------------------------------------------------
     # 4. Enforce Silver Schema
@@ -104,17 +111,7 @@ def transform_products():
     # ---------------------------------------------------------------------------
     # 7. Add Derived Product Columns
     # ---------------------------------------------------------------------------
-    df = df.withColumn(
-        "discounted_price",
-        F.round(F.col("price") * (1 - F.col("discount_percentage") / 100), 2),
-    )
-
-    df = df.withColumn(
-        "stock_status",
-        F.when(F.col("stock") == 0, "Out of Stock")
-        .when(F.col("stock") < 10, "Low Stock")
-        .otherwise("In Stock"),
-    )
+    df = add_product_derived_columns(df, LOW_STOCK_THRESHOLD)
 
     # ---------------------------------------------------------------------------
     # 8. Preview Silver Output

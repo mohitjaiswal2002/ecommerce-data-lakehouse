@@ -6,7 +6,12 @@ from pyspark.sql import functions as F
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from utils.config import SILVER_PRODUCTS_PATH, GOLD_PRODUCT_METRICS
+from utils.config import (
+    SILVER_PRODUCTS_PATH,
+    GOLD_CATEGORY_SUMMARY,
+    GOLD_BRAND_PERFORMANCE,
+    GOLD_PRODUCT_ENRICHED,
+)
 from utils.logger import get_logger
 
 
@@ -14,7 +19,7 @@ logger = get_logger(__name__)
 
 
 def transform_products():
-    logger.info("=== Gold Carts Pipeline — START ===")
+    logger.info("=== Gold Products Pipeline — START ===")
 
     spark = SparkSession.builder.appName("ProductsSilverToGold").getOrCreate()
 
@@ -44,11 +49,13 @@ def transform_products():
     brand_counts = df.groupBy("category", "brand").agg(
         F.count("product_id").alias("brand_product_count")
     )
+    # row_number (not rank) so ties yield exactly one top brand per category;
+    # otherwise the join below duplicates categories.
     window_top_brand = Window.partitionBy("category").orderBy(
-        F.col("brand_product_count").desc()
+        F.col("brand_product_count").desc(), F.col("brand")
     )
     top_brand_per_category = (
-        brand_counts.withColumn("rank", F.rank().over(window_top_brand))
+        brand_counts.withColumn("rank", F.row_number().over(window_top_brand))
         .filter(F.col("rank") == 1)
         .select(F.col("category"), F.col("brand").alias("top_brand"))
     )
@@ -157,21 +164,17 @@ def transform_products():
     # ---------------------------------------------------------------------------
     # Write Gold Tables
     # ---------------------------------------------------------------------------
-    category_summary_path  = os.path.join(GOLD_PRODUCT_METRICS, "category_summary")
-    brand_performance_path = os.path.join(GOLD_PRODUCT_METRICS, "brand_performance")
-    product_enriched_path  = os.path.join(GOLD_PRODUCT_METRICS, "product_enriched")
+    logger.info(f"Writing category_summary to: {GOLD_CATEGORY_SUMMARY}")
+    category_summary_df.write.mode("overwrite").parquet(GOLD_CATEGORY_SUMMARY)
 
-    logger.info(f"Writing category_summary to: {category_summary_path}")
-    category_summary_df.write.mode("overwrite").parquet(category_summary_path)
+    logger.info(f"Writing brand_performance to: {GOLD_BRAND_PERFORMANCE}")
+    brand_performance_df.write.mode("overwrite").parquet(GOLD_BRAND_PERFORMANCE)
 
-    logger.info(f"Writing brand_performance to: {brand_performance_path}")
-    brand_performance_df.write.mode("overwrite").parquet(brand_performance_path)
-
-    logger.info(f"Writing product_enriched to: {product_enriched_path}")
+    logger.info(f"Writing product_enriched to: {GOLD_PRODUCT_ENRICHED}")
     (
         product_enriched_df.write.mode("overwrite")
         .partitionBy("category")
-        .parquet(product_enriched_path)
+        .parquet(GOLD_PRODUCT_ENRICHED)
     )
 
     logger.info("=== Gold Products Pipeline — COMPLETE ===")
